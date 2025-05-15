@@ -2,13 +2,12 @@ name: Send Surgery Reminder
 
 on:
   schedule:
-    - cron: '30 23 * * *'  # 매일 KST 08:30 (23:30 UTC 기준)
-  workflow_dispatch:     # 수동 실행도 가능하게
+    - cron: '30 23 * * *'   # 한국시간 08:30 = UTC 23:30
+  workflow_dispatch:        # 수동 실행도 여전히 가능
 
 jobs:
-  reminder:
+  send-reminder:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
