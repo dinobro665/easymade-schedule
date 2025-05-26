@@ -40,3 +40,4 @@ async function sendReminders() {
     }
   }
 }
+console.log("✅ GitHub Actions 트리거 확인용 주석입니다.");
