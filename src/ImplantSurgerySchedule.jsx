@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from "firebase/firestore";
 import { firestore as db } from "./firebase-config";
 
+
 export default function ImplantSurgerySchedule() {
   const today = new Date().toISOString().split("T")[0];
   const [allSchedules, setAllSchedules] = useState([]);
@@ -15,15 +16,28 @@ export default function ImplantSurgerySchedule() {
   const [activeTab, setActiveTab] = useState("현재 일정");
   const [selectedIds, setSelectedIds] = useState([]);
   const [editCache, setEditCache] = useState({});
+  const [selectedHospital, setSelectedHospital] = useState("");
 
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "schedules"), (snapshot) => {
-      const fetched = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      fetched.sort((a, b) => new Date(a.date) - new Date(b.date));
-      setAllSchedules(fetched);
+useEffect(() => {
+  const unsubscribe = onSnapshot(collection(db, "schedules"), (snapshot) => {
+    const fetched = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const today = new Date().setHours(0, 0, 0, 0);
+
+    fetched.forEach((schedule) => {
+      const scheduleDate = new Date(schedule.date).setHours(0, 0, 0, 0);
+      if (scheduleDate < today && schedule.status !== "수술 완료") {
+        updateDoc(doc(db, "schedules", schedule.id), { status: "수술 완료" });
+      }
     });
-    return () => unsubscribe();
-  }, []);
+
+    // 날짜순으로 정렬 후 상태 저장
+    fetched.sort((a, b) => new Date(a.date) - new Date(b.date));
+    setAllSchedules(fetched);
+  });
+
+  return () => unsubscribe();
+}, []);
+
 
   const updateField = async (id, field, value) => {
     await updateDoc(doc(db, "schedules", id), { [field]: value });
@@ -37,27 +51,26 @@ export default function ImplantSurgerySchedule() {
     await deleteDoc(doc(db, "schedules", id));
   };
 
-  const deleteSelectedSchedules = async () => {
-    await Promise.all(selectedIds.map((id) => deleteSchedule(id)));
-    setSelectedIds([]);
-  };
 
   const toggleSelect = (id) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
   };
 
   const getRowColor = (status) => {
-    switch (status) {
-      case "요청됨": return "bg-yellow-100";
-      case "설계 진행": return "bg-yellow-150";
-      case "설계 중": return "bg-yellow-200";
-      case "컨펌 요청": return "bg-yellow-300";
-      case "제작 중": return "bg-yellow-400";
-      case "수술 완료": return "bg-green-100";
-      case "수술 연기": return "bg-gray-200";
-      default: return "";
-    }
-  };
+  switch (status) {
+    case "요청됨":
+      return "bg-gray-100";
+    case "설계 진행":
+      return "bg-yellow-100";
+    case "출력 진행":
+      return "bg-blue-100";
+    case "완료":
+      return "bg-red-100";
+    default:
+      return "bg-white";
+  }
+};
+
 
   const renderEditableCell = (schedule, field, tabType) => {
     const value = schedule[field];
@@ -82,7 +95,9 @@ export default function ImplantSurgerySchedule() {
   };
 
   const renderScheduleTable = (items, tabType = "default") => {
-    const sortedItems = [...items].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const sortedItems = [...items]
+    .filter((schedule) => schedule.status && schedule.date && schedule.hospital) // 🔥 여기에서 걸러줘야 함
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
 
     return (
       <>
@@ -95,11 +110,15 @@ export default function ImplantSurgerySchedule() {
               <TableHead className="text-center">환자 이름</TableHead>
               <TableHead className="text-center">수술 부위</TableHead>
               <TableHead className="text-center">수량</TableHead>
-              <TableHead className="text-center">{tabType === "complete" ? "" : "진행 상태"}</TableHead>
+              {tabType !== "complete" && tabType !== "canceled" && (
+  <TableHead className="text-center">진행 상태</TableHead>
+)}
+
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedItems.map((schedule) => (
+            {sortedItems
+                        .map((schedule) => (
               <TableRow key={schedule.id} className={`transition-colors ${getRowColor(schedule.status)}`}>
                 <TableCell className="text-center">
                   <Checkbox checked={selectedIds.includes(schedule.id)} onCheckedChange={() => toggleSelect(schedule.id)} className="cursor-pointer" />
@@ -109,48 +128,69 @@ export default function ImplantSurgerySchedule() {
                 <TableCell className="text-center">{renderEditableCell(schedule, "patient", tabType)}</TableCell>
                 <TableCell className="text-center">{renderEditableCell(schedule, "surgeryArea", tabType)}</TableCell>
                 <TableCell className="text-center">{renderEditableCell(schedule, "quantity", tabType)}</TableCell>
-                <TableCell className="text-center">
-                  {tabType === "complete" ? null : (
-                    <div className="flex flex-col gap-2">
-                      {tabType === "design" ? (
-                        <>
-                          <Select value={schedule.status} onValueChange={(value) => updateStatus(schedule.id, value)}>
-                            <SelectTrigger><SelectValue placeholder="진행 상태 선택" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="설계 중">설계 중</SelectItem>
-                              <SelectItem value="컨펌 요청">컨펌 요청</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button variant="secondary" size="sm" onClick={() => updateStatus(schedule.id, "제작 중")}>출력 의뢰</Button>
-                        </>
-                      ) : tabType === "printing" ? (
-                        <Button variant="secondary" size="sm" onClick={() => updateStatus(schedule.id, "수술 완료")}>수술 완료</Button>
-                      ) : (
-                        <>
-                          <Select value={schedule.status} onValueChange={(value) => updateStatus(schedule.id, value)}>
-                            <SelectTrigger><SelectValue placeholder="진행 상태 선택" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="요청됨">요청됨</SelectItem>
-                              <SelectItem value="수술 연기">수술 연기</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button variant="secondary" size="sm" onClick={() => updateStatus(schedule.id, "설계 진행")}>설계 진행</Button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </TableCell>
+                {tabType !== "complete" && tabType !== "canceled" && (
+  <TableCell className="text-center">
+    <div className="flex flex-col gap-2">
+      {tabType === "design" ? (
+        <>
+          <Select value={schedule.status} onValueChange={(value) => updateStatus(schedule.id, value)}>
+            <SelectTrigger>
+              <SelectValue placeholder="진행 상태 선택" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="설계 중">설계 중</SelectItem>
+              <SelectItem value="컨펌 요청">컨펌 요청</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="secondary" size="sm" onClick={() => updateStatus(schedule.id, "제작 중")}>
+            출력 의뢰
+          </Button>
+        </>
+      ) : tabType === "printing" ? (
+        <Button variant="secondary" size="sm" onClick={() => updateStatus(schedule.id, "수술 완료")}>
+          수술 완료
+        </Button>
+      ) : (
+        <>
+          <Select value={schedule.status} onValueChange={(value) => updateStatus(schedule.id, value)}>
+            <SelectTrigger>
+              <SelectValue placeholder="진행 상태 선택" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="요청됨">요청됨</SelectItem>
+              <SelectItem value="수술 연기">수술 연기</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="secondary" size="sm" onClick={() => updateStatus(schedule.id, "설계 진행")}>
+            설계 진행
+          </Button>
+        </>
+      )}
+    </div>
+  </TableCell>
+)}
+
+
+
+               <TableCell className="p-0 align-top w-[40px]">
+  <button
+    onClick={() => {
+      deleteSchedule(schedule.id);
+      setAllSchedules((prev) => prev.filter((item) => item.id !== schedule.id));
+    }}
+    className="w-full h-full bg-white text-red-500 hover:text-red-700 border-l flex items-center justify-center py-6"
+  >
+    ❌
+  </button>
+</TableCell>
+
               </TableRow>
             ))}
           </TableBody>
         </Table>
         {selectedIds.length > 0 && (
-          <div className="mt-4 text-right">
+          <div className="mt-4 text-left">
             <Select onValueChange={(value) => {
-  if (value === "일정 삭제") {
-    deleteSelectedSchedules();
-    return;
-  }
 
   if (value.startsWith("move-")) {
     const label = value.replace("move-", "");
@@ -174,19 +214,14 @@ export default function ImplantSurgerySchedule() {
 }}
 >
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="선택 작업" />
-              </SelectTrigger>
+                              </SelectTrigger>
              <SelectContent>
+  <SelectItem value="move-선택 작업">진행사항 선택</SelectItem>
   <SelectItem value="move-현재 일정">현재 일정으로 이동</SelectItem>
   <SelectItem value="move-설계 중 일정">설계 중 일정으로 이동</SelectItem>
   <SelectItem value="move-출력 중 일정">출력 중 일정으로 이동</SelectItem>
   <SelectItem value="move-수술 완료/연기 일정">수술 완료/연기 일정으로 이동</SelectItem>
-  <SelectItem value="tab-현재 일정">현재 일정 탭 보기</SelectItem>
-  <SelectItem value="tab-설계 중 일정">설계 중 탭 보기</SelectItem>
-  <SelectItem value="tab-출력 중 일정">출력 중 탭 보기</SelectItem>
-  <SelectItem value="tab-수술 완료/연기 일정">수술 완료/연기 탭 보기</SelectItem>
-  <SelectItem value="일정 삭제">선택 일정 삭제</SelectItem>
-</SelectContent>
+  </SelectContent>
 
             </Select>
           </div>
@@ -227,9 +262,10 @@ const tabClass = (label) =>
               <CardContent className="p-4 grid grid-cols-6 gap-4">
   <Select onValueChange={(value) => setNewSchedule({ ...newSchedule, hospital: value })}>
     <SelectTrigger>
-      <SelectValue placeholder="병원명 선택" />
-    </SelectTrigger>
+          </SelectTrigger>
     <SelectContent>
+      <SelectItem value="">병원명 선택
+      </SelectItem>
       <SelectItem value="중앙대학병원 구강악안면외과">중앙대학병원 구강악안면외과</SelectItem>
       <SelectItem value="신촌세브란스병원 성형외과">신촌세브란스병원 성형외과</SelectItem>
       <SelectItem value="동탄성심병원 성형외과">동탄성심병원 성형외과</SelectItem>
@@ -241,18 +277,21 @@ const tabClass = (label) =>
   <Input type="text" value={newSchedule.patient} onChange={(e) => setNewSchedule({ ...newSchedule, patient: e.target.value })} placeholder="환자 이름" />
   <Input type="text" value={newSchedule.surgeryArea} onChange={(e) => setNewSchedule({ ...newSchedule, surgeryArea: e.target.value })} placeholder="수술 부위" />
   <Input type="number" min="1" value={newSchedule.quantity} onChange={(e) => setNewSchedule({ ...newSchedule, quantity: e.target.value })} placeholder="수량" />
-  <Button
-    onClick={async () => {
-      if (!newSchedule.hospital || !newSchedule.date || !newSchedule.patient || !newSchedule.surgeryArea || !newSchedule.quantity) return;
-      await addDoc(collection(db, "schedules"), {
-        confirmDeadline: "",
-        ...newSchedule,
-      });
-      setNewSchedule({ hospital: "", date: "", patient: "", surgeryArea: "", quantity: "", status: "요청됨" });
-    }}
-  >
-    일정 추가
-  </Button>
+<Button
+  onClick={async () => {
+    if (!newSchedule.date || !newSchedule.patient || !newSchedule.surgeryArea || !newSchedule.quantity) return;
+    await addDoc(collection(db, "schedules"), {
+      hospital: selectedHospital,
+      confirmDeadline: "",
+      ...newSchedule,
+      email: ["osun7777@cgbio.co.kr","sj_kim0921@cgbio.co.kr"]  // ✅ 이 부분 추가 메일 알람 받고싶은 메일 추가하면됨 메일 옆에 "ㅇㅇ@ㅇㅇ" 이렇게 추가
+    });
+    setNewSchedule({ date: "", patient: "", surgeryArea: "", quantity: "", status: "요청됨" });
+  }}
+>
+  일정 추가
+</Button>
+
 </CardContent>
 
             </Card>
