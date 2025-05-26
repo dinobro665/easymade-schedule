@@ -2,8 +2,13 @@ const { initializeApp, applicationDefault } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const nodemailer = require('nodemailer');
 
-// Firebase 초기화
-initializeApp({ credential: applicationDefault() });
+// GitHub Actions에서 전달받은 JSON 환경변수 파싱
+const serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+
+initializeApp({
+  credential: cert(serviceAccount)
+});
+
 const db = getFirestore();
 
 // Gmail 설정
