@@ -1,12 +1,13 @@
 name: Send Surgery Reminder
 
 on:
- push:
+  push:
     branches:
       - main
   schedule:
     - cron: '30 23 * * *'   # 한국시간 08:30 = UTC 23:30
-  workflow_dispatch:        # 수동 실행도 여전히 가능
+  workflow_dispatch:        # ✅ 여기로 내리기
+
 
 jobs:
   send-reminder:
