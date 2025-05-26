@@ -13,6 +13,7 @@
     "@firebasegen/default-connector": "file:dataconnect-generated/js/default-connector",
     "clsx": "^2.1.1",
     "firebase": "^11.7.1",
+    "firebase-admin": "^13.4.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
