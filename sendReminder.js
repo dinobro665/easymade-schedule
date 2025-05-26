@@ -1,6 +1,33 @@
+const { initializeApp, applicationDefault } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+const nodemailer = require('nodemailer');
+
+// Firebase 초기화
+initializeApp({ credential: applicationDefault() });
+const db = getFirestore();
+
+// Gmail 설정
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "oys110801@gmail.com",
+    pass: "ltckfiwshzxznwsa", // 앱 비밀번호
+  },
+});
+
+// 오늘 날짜 (한국시간 기준)
+const now = new Date();
+now.setHours(now.getHours() + 9); // UTC → KST
+now.setHours(0, 0, 0, 0);
+
+const d1 = new Date(now);
+d1.setDate(now.getDate() + 1);
+
+const d10 = new Date(now);
+d10.setDate(now.getDate() + 10);
+
 async function sendReminders() {
   const snapshot = await db.collection("schedules").get();
-
   console.log(`📥 읽은 일정 개수: ${snapshot.size}`);
 
   const docs = snapshot.docs;
@@ -10,7 +37,7 @@ async function sendReminders() {
     const surgeryDate = new Date(data.date);
     surgeryDate.setHours(0, 0, 0, 0);
 
-    console.log(`[데이터 확인] ${data.patient} / ${data.date} / ${data.email}`);
+    console.log(`[데이터 확인] ${data.patient} / ${data.date} → 수술일자: ${surgeryDate.toDateString()}`);
 
     if (surgeryDate.getTime() === d1.getTime() || surgeryDate.getTime() === d10.getTime()) {
       console.log(`🔔 ${data.date}가 D-1 또는 D-10 조건 충족`);
@@ -37,7 +64,12 @@ async function sendReminders() {
           console.error(`❌ 이메일 전송 실패 (${recipient}):`, err);
         }
       }
+    } else {
+      console.log(`⏭️ ${data.date}는 D-1 또는 D-10이 아님`);
     }
   }
 }
-console.log("✅ GitHub Actions 트리거 확인용 주석입니다.");
+
+sendReminders().catch((err) => {
+  console.error("❌ 전체 에러:", err);
+});
