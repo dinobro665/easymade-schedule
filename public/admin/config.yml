@@ -1,0 +1,18 @@
+backend:
+  name: github
+  repo: dinobro665/easymade-schedule  # ← 네 GitHub 실제 정보로 정확히 설정
+  branch: main
+
+
+media_folder: "public/images/uploads"
+public_folder: "/images/uploads"
+
+collections:
+  - name: "pages"
+    label: "Pages"
+    folder: "content/pages"
+    create: true
+    slug: "{{slug}}"
+    fields:
+      - { label: "Title", name: "title", widget: "string" }
+      - { label: "Body", name: "body", widget: "markdown" }
